@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>.NET Senior Mülakat Platformu</title>
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        gray: { 850: '#1f2937', 950: '#030712' }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- PrismJS for C# Syntax Highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+
+    <!-- React & Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #030712; color: #f3f4f6; }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+        
+        /* Prism overrides for Tailwind */
+        pre[class*="language-"] { border-radius: 0.75rem; border: 1px solid #374151; background: #111827 !important; padding: 1rem; }
+        
+        /* Playground textarea hide scrollbar but keep functionality */
+        .playground-input::-webkit-scrollbar { display: none; }
+        .playground-input { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- MOCK DATA ---
+        const CATEGORIES = ["Tümü", "C# & Temeller", ".NET & Minimal API", "Entity Framework", "Dapper", "Resiliency & Mikroservis", "Garbage Collector"];
+
+        const QUESTIONS = [
+            {
+                id: 1,
+                category: "C# & Temeller",
+                question: "Asenkron programlamada yüksek trafikli ve çoğunlukla senkron tamamlanan işlemler için Task<T> yerine neden ValueTask<T> tercih edilmelidir?",
+                options: [
+                    "ValueTask, thread havuzundan (ThreadPool) bağımsız çalıştığı için.",
+                    "ValueTask referans tipi olmadığı için Heap üzerinde ekstra allocation (tahsis) oluşturmaz ve GC yükünü azaltır.",
+                    "ValueTask sadece veritabanı işlemlerinde kullanılabilen özel bir yapıdır.",
+                    "Task<T> kullanımı .NET 8 ile birlikte tamamen kullanımdan kaldırılmıştır."
+                ],
+                correctIndex: 1,
+                explanation: "Eğer bir metot çoğunlukla veriyi In-Memory Cache'den anında dönüyorsa (senkron tamamlanma), Task<T> gibi bir referans tipini her çağrıda Heap üzerinde oluşturmak (allocation) performansı düşürür. ValueTask bir 'struct' (değer tipi) olduğu için sadece Stack üzerinde yaşar ve Garbage Collector (GC) üzerinde ekstra baskı yaratmaz."
+            },
+            {
+                id: 2,
+                category: "Entity Framework",
+                question: "EF Core'da, bir ana tabloyla ilişkili (Include) birden fazla N (Many) ilişkili tabloyu çektiğimizde oluşan 'Cartesian Explosion' (Kartezyen Patlaması) sorununu nasıl önleriz?",
+                options: [
+                    ".AsNoTracking() metodu kullanarak.",
+                    ".AsQueryable() metodunu sonradan çağırarak.",
+                    ".AsSplitQuery() özelliğini kullanarak sorguları ayrı ayrı çalıştırarak.",
+                    "Lazy Loading özelliğini global olarak aktif ederek."
+                ],
+                correctIndex: 2,
+                explanation: "EF Core standart olarak her Include için join atarak devasa bir veri kümesi (kartezyen çarpımı) getirir. .AsSplitQuery() kullanıldığında ise EF Core bu devasa tek sorgu yerine, ana tablo ve ilişkili tablolar için ayrı SQL sorguları oluşturur ve veriyi RAM'de birleştirir. Bu da ağ trafiğini ve DB yorulmasını engeller."
+            },
+            {
+                id: 3,
+                category: "Dapper",
+                question: "Dapper'da One-to-Many (1'e N) ilişkili verileri (Örn: Bir Yazar ve Kitapları) veritabanından çekerken N+1 problemine düşmemek için hangi özellik kullanılır?",
+                options: [
+                    "Entity Framework tarafındaki Include() gibi bir özellik Dapper'da yoktur.",
+                    "QueryMultiple() metodu ve Dictionary yapısı kullanarak Multiple Mapping işlemi ile çözülür.",
+                    "Stored Procedure kullanmak tek çözümdür.",
+                    "Dapper.Contrib kütüphanesindeki GetWithInclude() metodu kullanılır."
+                ],
+                correctIndex: 1,
+                explanation: "Dapper'da 'Multiple Mapping' kullanılarak veriler tek bir JOIN sorgusu ile çekilir. C# tarafında ise bir Dictionary<int, Yazar> kullanılarak, aynı yazarın ID'si geldiğinde yeni nesne üretmek yerine var olan Yazar nesnesinin İçindeki Kitaplar listesine ekleme yapılır."
+            },
+            {
+                id: 4,
+                category: "Garbage Collector",
+                question: ".NET mimarisinde Large Object Heap (LOH) tahsislerini ve GC kaynaklı takılmaları (Pause Time) önlemek için yüksek performans gerektiren veri işleme senaryolarında hangisi kullanılır?",
+                options: [
+                    "Verileri byte dizisi (byte[]) yerine List<int> içinde tutmak.",
+                    "Her işlemde yeni bir array yaratıp GC.Collect() metodunu manuel çağırmak.",
+                    "ArrayPool<T> ve Span<T> / Memory<T> yapılarını kullanmak.",
+                    "GC modunu Workstation modundan Server moduna çekmek."
+                ],
+                correctIndex: 2,
+                explanation: "LOH, 85.000 byte'tan büyük nesnelerin tutulduğu ve GC'nin temizlerken sıkıştırma (compaction) yapmadığı alandır. Bu da bellek parçalanmasına (fragmentation) yol açar. ArrayPool<T> kullanılarak büyük diziler yeniden kullanılır ve tahsis engellenir. Span<T> ise bu bellek bloklarını kopyalama yapmadan okumamızı sağlar."
+            },
+            {
+                id: 5,
+                category: "Resiliency & Mikroservis",
+                question: "Polly kütüphanesi kullanırken, çökmüş olan veya çok yavaş cevap veren dış bir API'ye sürekli istek atıp kendi sistem kaynaklarımızı (Thread Pool vb.) tüketmemek için (Fail-Fast) hangi pattern uygulanmalıdır?",
+                options: [
+                    "Retry Pattern (Sürekli tekrar deneme)",
+                    "Circuit Breaker (Devre Kesici)",
+                    "Rate Limiting",
+                    "Bulkhead Isolation"
+                ],
+                correctIndex: 1,
+                explanation: "Circuit Breaker (Devre Kesici) deseni, arka arkaya belirli sayıda hata alındığında (Örn: 5 kez) devreyi 'Açık' (Open) konuma getirir ve istekleri dış API'ye gitmeden anında reddeder (Fail-fast). Belirli bir süre sonra devreyi 'Yarı Açık' (Half-Open) yapıp API'nin düzelip düzelmediğini test eder."
+            },
+            {
+                id: 6,
+                category: ".NET & Minimal API",
+                question: "Minimal API'lerde Exception Handling (Hata Yönetimi) yaparken modern ve standart bir HTTP Hata yapısı (Problem Details) dönmek için .NET 7/8 ile gelen en iyi pratik hangisidir?",
+                options: [
+                    "IExceptionHandler arayüzünü (interface) implemente edip middleware olarak eklemek.",
+                    "Sadece try-catch kullanıp 500 kodu dönmek.",
+                    "Global Exception filter attribute yazmak.",
+                    "Uygulamanın başına UseDeveloperExceptionPage eklemek."
+                ],
+                correctIndex: 0,
+                explanation: ".NET 8 ile IExceptionHandler arayüzü eklendi. Bu arayüzü uygulayan özel sınıflar yazıp (Örn: GlobalExceptionHandler), program.cs'de builder.Services.AddExceptionHandler<GlobalExceptionHandler>() ile ekleyerek merkezi ve RFC standartlarında (ProblemDetails) hata formatları dönebiliriz."
+            },
+            {
+                id: 7,
+                category: "Resiliency & Mikroservis",
+                question: "E-Ticaret veya Bankacılık gibi sistemlerde, ağ kopmasından dolayı kullanıcının aynı 'Para Transferi' veya 'Ödeme' isteğini yanlışlıkla 3 kez tekrar göndermesi (Retry) durumunda mükerrer işlemi önleyen kavramın adı nedir?",
+                options: [
+                    "Concurrency Control",
+                    "Idempotency",
+                    "Saga Pattern",
+                    "Event Sourcing"
+                ],
+                correctIndex: 1,
+                explanation: "Idempotency (Eşetkisellik), aynı isteğin 1 kez veya 100 kez işlenmesi durumunda sistemdeki sonucun (state) değişmemesidir. İstemci her işlem için benzersiz bir Idempotency-Key (Guid) gönderir, sunucu bu key'i cache'de (Redis) tutar. Aynı key tekrar gelirse, işlemi yapmak yerine daha önceki yanıtı döner."
+            }
+        ];
+
+        const STUDY_NOTES = [
+            {
+                category: "C# & Temeller",
+                content: "Record tipleri immutable (değiştirilemez) veri taşımak için tasarlanmıştır. DTO'lar için mükemmeldir. Value equality (değer eşitliği) sağlarlar. Yani iki record nesnesinin içindeki özellikler (property) aynıysa bu iki nesne birbirine eşittir (Referansları farklı olsa bile). Null kontrolünde ise C# 9+ ile Pattern Matching kullanımı (`if (user is null)`) veya `if (user is not null)` kullanımı performansı ve okunabilirliği artırır."
+            },
+            {
+                category: ".NET & ASP.NET",
+                content: "Minimal API'lerde Dependency Injection yaparken `[FromServices]` özelliği kullanılırdı, fakat modern .NET sürümlerinde metoda doğrudan interface'i parametre olarak vermek yeterlidir. Caching tarafında Cache Stampede (Önbellek İzdihamı) önlemek için Double-Checked Locking veya Redis kilit mekanizmaları (RedLock) tercih edilmelidir."
+            },
+            {
+                category: "Entity Framework Core",
+                content: "Performans için `AsNoTracking()` sadece veri okunacaksa (read-only) kesinlikle kullanılmalıdır. EF'nin nesne takip mekanizması belleği ciddi yorar. Yüksek hacimli veri yüklemelerinde (Bulk Insert) standart EF yavaştır; `EFCore.BulkExtensions` gibi araçlar veya çiğ SQL (Raw SQL) tercih edilmelidir. Ayrıca Veritabanında kolonu olup C# modelinde görünmesini istemediğimiz alanlar için Shadow Properties özelliği kullanılır."
+            },
+            {
+                category: "Resiliency & Hataya Dayanıklılık",
+                content: "Mikroservisler arası iletişimde Polly kullanmak elzemdir. \n- Retry: Geçici ağ dalgalanmalarında tekrar deneme.\n- Circuit Breaker: Düşmüş servisi koruma ve çağıran sistemi kilitlenmekten kurtarma.\n- Fallback: Eğer ana servis veya veritabanı çökerse, Cache'den eski veriyi dönme veya varsayılan bir yanıt dönme işlemidir."
+            }
+        ];
+
+        // --- ICONS (Inline SVG to avoid external deps) ---
+        const Icons = {
+            Home: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
+            Code: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>,
+            Book: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>,
+            Terminal: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
+            Check: () => <svg className="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
+            X: () => <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        };
+
+        // --- HOOKS ---
+        function useLocalStorage(key, initialValue) {
+            const [storedValue, setStoredValue] = useState(() => {
+                if (typeof window === "undefined") return initialValue;
+                try {
+                    const item = window.localStorage.getItem(key);
+                    return item ? JSON.parse(item) : initialValue;
+                } catch (error) {
+                    console.error(error);
+                    return initialValue;
+                }
+            });
+
+            const setValue = (value) => {
+                try {
+                    const valueToStore = value instanceof Function ? value(storedValue) : value;
+                    setStoredValue(valueToStore);
+                    if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(valueToStore));
+                } catch (error) {
+                    console.error(error);
+                }
+            };
+            return [storedValue, setValue];
+        }
+
+        // --- COMPONENTS ---
+
+        const Dashboard = ({ stats }) => (
+            <div className="space-y-6 fade-in">
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-white">İlerleme Özeti</h2>
+                    <p className="text-gray-400 mt-1">Mülakatlara hazırlık sürecindeki durumunuz.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
+                        <p className="text-sm font-medium text-gray-400">Toplam Soru</p>
+                        <p className="text-3xl font-bold text-white mt-2">{stats.total}</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
+                        <p className="text-sm font-medium text-gray-400">Görülen (Çözülen)</p>
+                        <p className="text-3xl font-bold text-blue-500 mt-2">{stats.seen}</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
+                        <p className="text-sm font-medium text-gray-400">Doğru Cevap</p>
+                        <p className="text-3xl font-bold text-green-500 mt-2">{stats.correct}</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
+                        <p className="text-sm font-medium text-gray-400">Başarı Oranı</p>
+                        <p className="text-3xl font-bold text-purple-500 mt-2">
+                            {stats.seen > 0 ? Math.round((stats.correct / stats.seen) * 100) : 0}%
+                        </p>
+                    </div>
+                </div>
+
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mt-6">
+                    <h3 className="text-lg font-semibold text-white mb-4">Sıradaki Adım</h3>
+                    <p className="text-gray-400 mb-4">Soru havuzuna giderek çözmediğiniz soruları inceleyin veya mülakat öncesi teknik notları tekrar okuyun.</p>
+                </div>
+            </div>
+        );
+
+        const QuestionPool = ({ questions, progress, setProgress }) => {
+            const [filter, setFilter] = useState("Tümü");
+            const [activeQ, setActiveQ] = useState(null);
+
+            const filteredQuestions = useMemo(() => {
+                return filter === "Tümü" ? questions : questions.filter(q => q.category === filter);
+            }, [filter, questions]);
+
+            useEffect(() => {
+                if (activeQ) Prism.highlightAll();
+            }, [activeQ]);
+
+            const handleAnswer = (qId, isCorrect) => {
+                const currentProgress = progress[qId] || {};
+                if (!currentProgress.answered) {
+                    setProgress(prev => ({
+                        ...prev,
+                        [qId]: { seen: true, answered: true, isCorrect }
+                    }));
+                }
+            };
+
+            const markAsSeen = (qId) => {
+                if (!progress[qId]) {
+                    setProgress(prev => ({ ...prev, [qId]: { seen: true, answered: false, isCorrect: false } }));
+                }
+            }
+
+            return (
+                <div className="flex flex-col h-full fade-in">
+                    <div className="flex flex-wrap gap-2 mb-6">
+                        {CATEGORIES.map(c => (
+                            <button 
+                                key={c}
+                                onClick={() => setFilter(c)}
+                                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 
+                                ${filter === c ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'bg-gray-900 text-gray-400 hover:bg-gray-800 hover:text-white border border-gray-800'}`}
+                            >
+                                {c}
+                            </button>
+                        ))}
+                    </div>
+
+                    {!activeQ ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {filteredQuestions.map((q) => {
+                                const stat = progress[q.id];
+                                let statusColor = "border-gray-800 bg-gray-900";
+                                let statusText = "Çözülmedi";
+                                
+                                if (stat?.answered) {
+                                    if (stat.isCorrect) { statusColor = "border-green-500/30 bg-green-500/5"; statusText = "Doğru"; }
+                                    else { statusColor = "border-red-500/30 bg-red-500/5"; statusText = "Yanlış"; }
+                                } else if (stat?.seen) {
+                                    statusColor = "border-blue-500/30 bg-blue-500/5"; statusText = "İncelendi";
+                                }
+
+                                return (
+                                    <div 
+                                        key={q.id} 
+                                        onClick={() => { setActiveQ(q); markAsSeen(q.id); }}
+                                        className={`p-5 rounded-xl cursor-pointer transition-all hover:scale-[1.01] border ${statusColor}`}
+                                    >
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">{q.category}</span>
+                                            <span className="text-xs font-medium text-gray-500">{statusText}</span>
+                                        </div>
+                                        <p className="text-white font-medium line-clamp-2">{q.question}</p>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 lg:p-8 relative">
+                            <button 
+                                onClick={() => setActiveQ(null)}
+                                className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                            >
+                                Geri Dön
+                            </button>
+                            <span className="text-sm font-semibold uppercase tracking-wider text-blue-500 mb-2 block">{activeQ.category}</span>
+                            <h3 className="text-xl font-medium text-white mb-6 pr-16">{activeQ.question}</h3>
+                            
+                            <div className="space-y-3">
+                                {activeQ.options.map((opt, idx) => {
+                                    const isAnswered = progress[activeQ.id]?.answered;
+                                    const isSelectedCorrect = idx === activeQ.correctIndex;
+                                    
+                                    let btnStyle = "bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700";
+                                    if (isAnswered) {
+                                        if (isSelectedCorrect) btnStyle = "bg-green-500/10 border-green-500 text-green-400";
+                                        else btnStyle = "bg-red-500/10 border-red-500/50 text-red-400 opacity-50";
+                                    }
+
+                                    return (
+                                        <button 
+                                            key={idx}
+                                            disabled={isAnswered}
+                                            onClick={() => handleAnswer(activeQ.id, idx === activeQ.correctIndex)}
+                                            className={`w-full text-left p-4 rounded-lg border transition-all ${btnStyle}`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span>{opt}</span>
+                                                {isAnswered && isSelectedCorrect && <Icons.Check />}
+                                            </div>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+
+                            {progress[activeQ.id]?.answered && (
+                                <div className="mt-8 p-5 bg-blue-900/20 border border-blue-800/50 rounded-lg fade-in">
+                                    <h4 className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
+                                        <Icons.Book /> Mülakat Açıklaması
+                                    </h4>
+                                    <p className="text-gray-300 text-sm leading-relaxed">{activeQ.explanation}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )
+        };
+
+        const StudyGuide = () => {
+            return (
+                <div className="space-y-6 fade-in">
+                    <div>
+                        <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Çalışma Rehberi</h2>
+                        <p className="text-gray-400">Dotnet Tips referans alınarak hazırlanan kritik mülakat hap bilgileri.</p>
+                    </div>
+                    
+                    <div className="grid gap-6">
+                        {STUDY_NOTES.map((note, idx) => (
+                            <div key={idx} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                                <div className="px-6 py-4 border-b border-gray-800 bg-gray-850/50">
+                                    <h3 className="font-semibold text-lg text-white">{note.category}</h3>
+                                </div>
+                                <div className="p-6">
+                                    <p className="text-gray-300 leading-relaxed">{note.content}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const Playground = () => {
+            const defaultCode = `using System;
+using System.Threading.Tasks;
+
+public class InterviewScenario 
+{
+    // Task yerine ValueTask kullanımı senaryosu
+    public async ValueTask<int> GetUserPointAsync(int userId)
+    {
+        // Örnek: Cache'de varsa anında dön (Heap allocation sıfır)
+        if (userId == 1) return 100;
+        
+        // Cache'de yoksa veritabanına asenkron git
+        await Task.Delay(500); 
+        return 50;
+    }
+    
+    public static void Main()
+    {
+        Console.WriteLine("Sistem Başlatıldı...");
+    }
+}`;
+            const [code, setCode] = useState(defaultCode);
+            const [output, setOutput] = useState("");
+
+            const handleRun = () => {
+                setOutput("Derleniyor...\n...\nSistem Başlatıldı...\n\n[Sistem Notu]: Statik web ortamında gerçek bir CoreCLR (WebAssembly) çalıştırılamadığından bu alan mock (simülasyon) amaçlıdır. Kodunuzun sözdizimi doğrudur.");
+            };
+
+            useEffect(() => {
+                Prism.highlightAll();
+            }, [code]);
+
+            return (
+                <div className="flex flex-col h-[calc(100vh-8rem)] gap-4 fade-in">
+                    <div>
+                        <h2 className="text-2xl font-bold tracking-tight text-white">Playground (Simülasyon)</h2>
+                        <p className="text-gray-400 text-sm mt-1">Tabletinizden algoritma pratiği yapmak için kullanabilirsiniz.</p>
+                    </div>
+
+                    <div className="flex-1 grid grid-rows-2 lg:grid-rows-1 lg:grid-cols-2 gap-4">
+                        {/* Editor Area */}
+                        <div className="relative bg-[#111827] border border-gray-800 rounded-xl overflow-hidden group">
+                            <div className="absolute top-0 w-full bg-gray-900 border-b border-gray-800 px-4 py-2 flex justify-between items-center z-10">
+                                <span className="text-xs font-mono text-gray-400">Program.cs</span>
+                                <button onClick={handleRun} className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded transition-colors">
+                                    <Icons.Terminal /> Run
+                                </button>
+                            </div>
+                            
+                            {/* Textarea strictly overlapping the pre to simulate editor */}
+                            <textarea
+                                value={code}
+                                onChange={(e) => setCode(e.target.value)}
+                                spellCheck="false"
+                                className="absolute inset-0 w-full h-full pt-14 px-4 bg-transparent text-transparent caret-white resize-none outline-none font-mono text-sm z-20 playground-input"
+                            />
+                            <pre aria-hidden="true" className="absolute inset-0 w-full h-full pt-14 px-4 bg-[#111827] m-0 overflow-hidden font-mono text-sm z-0">
+                                <code className="language-csharp">{code}</code>
+                            </pre>
+                        </div>
+
+                        {/* Console Output */}
+                        <div className="bg-black border border-gray-800 rounded-xl p-4 flex flex-col">
+                            <div className="text-xs font-mono text-gray-500 mb-2 uppercase">Console Output</div>
+                            <pre className="flex-1 overflow-y-auto text-green-400 font-mono text-sm whitespace-pre-wrap">
+                                {output || ">_ Kodunuzu çalıştırın..."}
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- MAIN APP ---
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            // Progress structure: { [questionId]: { seen: boolean, answered: boolean, isCorrect: boolean } }
+            const [progress, setProgress] = useLocalStorage('dotnet_interview_progress', {});
+
+            const stats = {
+                total: QUESTIONS.length,
+                seen: Object.values(progress).filter(p => p.seen).length,
+                correct: Object.values(progress).filter(p => p.isCorrect).length,
+            };
+
+            const renderContent = () => {
+                switch(activeTab) {
+                    case 'dashboard': return <Dashboard stats={stats} />;
+                    case 'quiz': return <QuestionPool questions={QUESTIONS} progress={progress} setProgress={setProgress} />;
+                    case 'study': return <StudyGuide />;
+                    case 'playground': return <Playground />;
+                    default: return <Dashboard stats={stats} />;
+                }
+            };
+
+            const navItems = [
+                { id: 'dashboard', label: 'Dashboard', icon: <Icons.Home /> },
+                { id: 'quiz', label: 'Soru Havuzu', icon: <Icons.Code /> },
+                { id: 'study', label: 'Konu Anlatımı', icon: <Icons.Book /> },
+                { id: 'playground', label: 'Playground', icon: <Icons.Terminal /> },
+            ];
+
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row bg-[#030712]">
+                    {/* Sidebar / Topbar */}
+                    <nav className="md:w-64 bg-gray-900/50 border-r border-gray-800 p-4 flex flex-col shrink-0 overflow-x-auto md:overflow-x-hidden border-b md:border-b-0">
+                        <div className="flex items-center gap-3 mb-6 md:mb-10 px-2 shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg">.NET</div>
+                            <h1 className="font-bold text-white tracking-tight hidden md:block">Mastery</h1>
+                        </div>
+                        
+                        <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible">
+                            {navItems.map(item => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => setActiveTab(item.id)}
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all whitespace-nowrap shrink-0
+                                        ${activeTab === item.id 
+                                            ? 'bg-blue-600/10 text-blue-500 font-medium' 
+                                            : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+                                        }`}
+                                >
+                                    {item.icon}
+                                    <span>{item.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </nav>
+
+                    {/* Main Content */}
+                    <main className="flex-1 p-4 md:p-8 max-h-screen overflow-y-auto w-full max-w-6xl mx-auto">
+                        {renderContent()}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</body>
+</html>
