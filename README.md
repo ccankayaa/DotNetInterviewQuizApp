@@ -4,7 +4,7 @@
 >
 > **Geliştiren / Developed by:** [ccankaya](https://github.com/ccankayaa)
 
-![Screenshot/og banner](./app/opengraph-image.png)
+Open Graph preview is generated at build time by [`app/opengraph-image.tsx`](./app/opengraph-image.tsx).
 
 ## What is included / Neler var?
 
