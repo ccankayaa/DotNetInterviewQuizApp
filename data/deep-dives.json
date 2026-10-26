@@ -1,0 +1,496 @@
+[
+  {
+    "topicId": "cil-and-metadata",
+    "mentalModel": {
+      "tr": "CIL bir ara dildir: C# derleyici tip bilgisini ve IL talimatlarını assembly’ye koyar; CLR JIT veya AOT yolu ile hedef işlemcide çalışabilecek biçime dönüştürür. CIL ve native assembly aynı şey değildir.",
+      "en": "CIL is an intermediate language: the C# compiler emits instructions and metadata into assemblies; the CLR uses JIT or AOT paths to produce executable native instructions. CIL is not CPU machine code."
+    },
+    "language": "il",
+    "code": "IL_0000: ldarg.0\nIL_0001: ldc.i4.1\nIL_0002: add\nIL_0003: ret",
+    "checkpoint": {
+      "tr": "ldarg, ldc, add ve ret adımlarını sırayla açıkla. Kaynak C# kodu ile IL çıktısını karşılaştırırken debug/release ve optimizasyon farkını unutma.",
+      "en": "Explain ldarg, ldc, add, and ret in sequence. Remember debug/release and optimization differences when comparing source code to emitted IL."
+    }
+  },
+  {
+    "topicId": "call-versus-callvirt-il",
+    "mentalModel": {
+      "tr": "callvirt talimatı her zaman dinamik sanal dispatch anlamına gelmez: sanal olmayan instance metodunda null kontrolü sağlamak için de üretilebilir. IL’nin çağrı hedefini incelerken final/sealed de önemlidir.",
+      "en": "callvirt does not always mean dynamic virtual dispatch: compilers can emit it for non-virtual instance methods to enforce a null check. Sealed/final also matters when studying a call site."
+    },
+    "language": "il",
+    "code": "IL_0000: ldarg.0\nIL_0001: callvirt instance void Client::Send()\nIL_0006: ret",
+    "checkpoint": {
+      "tr": "call, callvirt ve constrained. önekini ne zaman gördüğünü açıklayabil. JIT inlining sonrası gerçek makine kodu farklı olabilir.",
+      "en": "Explain when call, callvirt, and the constrained. prefix appear. The actual machine code may differ after JIT inlining."
+    }
+  },
+  {
+    "topicId": "jit-and-tiered-compilation",
+    "mentalModel": {
+      "tr": "Tiered compilation başlangıçta daha hızlı derlenen kodla çalışmaya başlatıp sıcak metotları daha pahalı optimizasyonlarla yeniden derleyebilir. Bu, p50 ve ilk istek gecikmesini ayrı ölçmen gerektiğini gösterir.",
+      "en": "Tiered compilation can initially use quickly generated code and later recompile hot methods with more expensive optimizations. This is why steady-state throughput and cold-start latency must be measured separately."
+    },
+    "language": "bash",
+    "code": "dotnet-counters monitor --process-id <PID> System.Runtime\n# Capture a benchmark after warm-up and a separate cold-start run.",
+    "checkpoint": {
+      "tr": "Ölçüm yaparken warm-up, Dynamic PGO, tiering ve ReadyToRun etkilerini izole et.",
+      "en": "Isolate warm-up, Dynamic PGO, tiering, and ReadyToRun effects in your benchmarks."
+    }
+  },
+  {
+    "topicId": "readytorun-and-native-aot",
+    "mentalModel": {
+      "tr": "ReadyToRun assembly içine önceden native kod yerleştirir ancak JIT yolu da kalabilir. Native AOT yayın aşamasında hedef makine kodu üretir ve sınırsız reflection/dynamic loading senaryoları sınırlıdır.",
+      "en": "ReadyToRun embeds ahead-of-time native code into assemblies yet may still involve JIT compilation. Native AOT compiles ahead of deployment and constrains open-ended reflection and dynamic loading."
+    },
+    "language": "xml",
+    "code": "<PropertyGroup>\n  <PublishAot>true</PublishAot>\n</PropertyGroup>",
+    "checkpoint": {
+      "tr": "Reflection kullanan serializer, plugin loader ve dinamik proxy’ler için trimming/AOT analiz uyarılarını oku.",
+      "en": "Review trimming/AOT analysis warnings for reflection serializers, plugin loaders, and runtime proxies."
+    }
+  },
+  {
+    "topicId": "reflection-and-metadata-access",
+    "mentalModel": {
+      "tr": "Reflection çalışma zamanında metadata okumak ve türlere erişmek için güçlüdür, ama gizli bağımlılıklar üretir. Performansın yanı sıra trimming ve AOT uyumluluğunu düşün. Tür üyeleri için BindingFlags belirleyici olabilir.",
+      "en": "Reflection enables runtime metadata inspection but creates hidden reachability dependencies. Think beyond speed: trimming and AOT need analyzable member access. BindingFlags changes what you discover."
+    },
+    "language": "csharp",
+    "code": "var type = typeof(Order);\nvar props = type.GetProperties(\n    BindingFlags.Public | BindingFlags.Instance);\nforeach (var prop in props)\n    Console.WriteLine(prop.Name);",
+    "checkpoint": {
+      "tr": "GetType(), typeof, Activator.CreateInstance, source generator ve Expression<T> kullanım amaçlarını ayırt et.",
+      "en": "Distinguish GetType(), typeof, Activator.CreateInstance, source generators, and Expression<T> use cases."
+    }
+  },
+  {
+    "topicId": "generational-garbage-collection",
+    "mentalModel": {
+      "tr": "Çoğu nesnenin kısa yaşadığı varsayımı Gen0/Gen1/Gen2 ayrımının temelidir. GC yaşam süresi ve erişilebilirliği takip eder; IDisposable bir nesnenin managed heap’ten anında silinmesi değildir.",
+      "en": "Generational GC builds on the observation that most objects die young. The collector tracks reachability and generations; IDisposable does not instantly reclaim managed memory."
+    },
+    "language": "csharp",
+    "code": "using var stream = File.OpenRead(path);\n// Dispose releases the resource deterministically.\n// GC reclaims managed memory when appropriate.",
+    "checkpoint": {
+      "tr": "Allocation rate, pause time, Gen2 GC ve finalization queue verilerini farklı semptomlar olarak değerlendir.",
+      "en": "Treat allocation rate, pause duration, Gen2 collections, and finalization queue as different signals."
+    }
+  },
+  {
+    "topicId": "async-await-state-machines",
+    "mentalModel": {
+      "tr": "async/await, işi otomatik olarak başka bir thread’e taşımaz: compiler bir state machine üretir. I/O bekleme thread’i serbest bırakabilir; CPU-bound hesaplama hâlâ CPU gerektirir.",
+      "en": "async/await does not automatically create another thread: the compiler generates a state machine. Awaiting I/O can free the current thread, but CPU-bound work still consumes CPU."
+    },
+    "language": "csharp",
+    "code": "public async Task<string> LoadAsync(HttpClient client,\n    CancellationToken ct)\n{\n    using var response = await client.GetAsync(\"/health\", ct);\n    response.EnsureSuccessStatusCode();\n    return await response.Content.ReadAsStringAsync(ct);\n}",
+    "checkpoint": {
+      "tr": "Task.Run, SynchronizationContext, ConfigureAwait ve ThreadPool starvation farklarını örnekle anlat.",
+      "en": "Explain Task.Run, SynchronizationContext, ConfigureAwait, and ThreadPool starvation with examples."
+    }
+  },
+  {
+    "topicId": "program-cs-and-modern-hosting",
+    "mentalModel": {
+      "tr": "Modern ASP.NET Core’da Program.cs önce host, configuration, logging ve DI kayıtlarını oluşturur; builder.Build() sonrası request pipeline kurulur. Modülerliği korumak için servis kayıtlarını extension method’lara ayırabilirsin.",
+      "en": "In modern ASP.NET Core, Program.cs wires up host, configuration, logging, and DI; the request pipeline is built after builder.Build(). Move related registrations into cohesive extensions without hiding lifecycle rules."
+    },
+    "language": "csharp",
+    "code": "var builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddHealthChecks();\nbuilder.Services.AddProblemDetails();\nbuilder.Services.AddScoped<IOrderService, OrderService>();\nvar app = builder.Build();\napp.UseExceptionHandler();\napp.MapHealthChecks(\"/health\");\napp.MapGet(\"/orders/{id}\", (int id) => Results.Ok(id));\napp.Run();",
+    "checkpoint": {
+      "tr": "BuildServiceProvider’ı manuel çağırmanın captive dependency ve duplicate singleton riskini; middleware sırası ve hosted service yaşam döngüsünü tartış.",
+      "en": "Discuss why manual BuildServiceProvider risks duplicate singletons, how middleware order affects behavior, and when hosted services start."
+    }
+  },
+  {
+    "topicId": "global-asax-and-classic-asp-net",
+    "mentalModel": {
+      "tr": "Global.asax, .NET Framework üzerindeki klasik System.Web ASP.NET yaşam döngüsüne aittir. ASP.NET Core’da Global.asax doğrudan çalışmaz; başlangıç kuralları Program.cs ve middleware/hosted service yapısına taşınır.",
+      "en": "Global.asax belongs to classic System.Web ASP.NET on .NET Framework. ASP.NET Core does not execute it: startup and request lifecycle responsibilities migrate to Program.cs, middleware, and hosted services."
+    },
+    "language": "csharp",
+    "code": "// Classic ASP.NET / System.Web\nprotected void Application_Start() { /* routes */ }\nprotected void Application_Error() { /* global error */ }\n// ASP.NET Core replacements:\n// Program.cs: register services, Map... routes\n// app.UseExceptionHandler(): centralized errors",
+    "checkpoint": {
+      "tr": "Application_BeginRequest, Application_Start ve Session_Start sorumluluklarını modern hosting modeline eşle.",
+      "en": "Map Application_BeginRequest, Application_Start, and Session_Start responsibilities to modern hosting primitives."
+    }
+  },
+  {
+    "topicId": "di-lifetimes-and-captive-dependencies",
+    "mentalModel": {
+      "tr": "Singleton bütün uygulama boyunca yaşar, Scoped bir scope boyunca, Transient resolve başına. Scoped DbContext’i Singleton içinde yakalamak captive dependency ve eşzamanlı veri hataları yaratabilir.",
+      "en": "Singleton lives for an application, Scoped for one scope, and Transient per resolution. Capturing a scoped DbContext in a singleton can leak request state and create concurrency bugs."
+    },
+    "language": "csharp",
+    "code": "builder.Services.AddScoped<AppDbContext>();\nbuilder.Services.AddSingleton<Worker>();\n// In a singleton worker, create a scope per operation:\nusing var scope = scopeFactory.CreateScope();\nvar db = scope.ServiceProvider.GetRequiredService<AppDbContext>();",
+    "checkpoint": {
+      "tr": "DI container’ın thread-safe olması singleton nesnenin thread-safe olduğu anlamına gelmez.",
+      "en": "The DI container being thread-safe does not make resolved singleton instances thread-safe."
+    }
+  },
+  {
+    "topicId": "middleware-ordering",
+    "mentalModel": {
+      "tr": "Middleware birbiri içine geçen bir zincirdir: istek yönünde kayıt sırası, yanıt yönünde ters sıra. Authentication ile authorization farklı adımlardır. Exception handling genellikle en üst seviyede konumlandırılır.",
+      "en": "Middleware forms a nested chain: inbound calls follow registration order; responses unwind in reverse. Authentication differs from authorization. Exception handling is usually placed early."
+    },
+    "language": "csharp",
+    "code": "app.UseExceptionHandler();\napp.UseRouting();\napp.UseAuthentication();\napp.UseAuthorization();\napp.MapControllers();",
+    "checkpoint": {
+      "tr": "Yanlış middleware sırası 401/403, log eksikliği ve bypass riskleri üretir. Endpoint routing modeline göre gerçek pipeline’ı doğrula.",
+      "en": "An incorrect pipeline can change 401/403 results, tracing, and enforcement. Verify the actual endpoint-routing model."
+    }
+  },
+  {
+    "topicId": "backgroundservice-and-graceful-shutdown",
+    "mentalModel": {
+      "tr": "BackgroundService bir request ömrüne bağlı değildir. Hosted service genel olarak singleton yaşam döngüsündedir; scoped DbContext gerektiğinde yeni scope aç. Shutdown token’ı görmezden gelirsen deploy sırasında yarım kalan işler oluşabilir.",
+      "en": "BackgroundService is independent of an HTTP request scope and is generally hosted with singleton lifetime. Create a scope for scoped DbContexts. Ignoring shutdown tokens risks partially processed jobs at deploy time."
+    },
+    "language": "csharp",
+    "code": "protected override async Task ExecuteAsync(CancellationToken ct)\n{\n  while (!ct.IsCancellationRequested)\n  {\n    using var scope = scopeFactory.CreateScope();\n    await scope.ServiceProvider\n        .GetRequiredService<IJobRunner>().RunAsync(ct);\n    await Task.Delay(TimeSpan.FromSeconds(10), ct);\n  }\n}",
+    "checkpoint": {
+      "tr": "İşler idempotent değilse retry, restart ve failover aynı işi iki kez çalıştırabilir.",
+      "en": "Without idempotency, retries, restarts, and failover can execute a job twice."
+    }
+  },
+  {
+    "topicId": "httpclient-and-handler-pooling",
+    "mentalModel": {
+      "tr": "HttpClient her request için aç-kapat nesnesi değildir. Socket/handler havuzlarını tekrar kullan; HttpClientFactory veya uygun PooledConnectionLifetime ile DNS değişimine uyum sağla.",
+      "en": "Do not construct/dispose HttpClient for each request. Reuse connection pools with IHttpClientFactory or an appropriately long-lived client with PooledConnectionLifetime."
+    },
+    "language": "csharp",
+    "code": "builder.Services.AddHttpClient<PaymentClient>(client =>\n{\n    client.Timeout = TimeSpan.FromSeconds(5);\n});\n// Typed clients are short-lived, handlers are pooled.",
+    "checkpoint": {
+      "tr": "Socket exhaustion, DNS stale, handler cookie paylaşımı ve timeout bütçesini ayrı problemler olarak ele al.",
+      "en": "Treat port exhaustion, stale DNS, shared handler cookies, and timeout budgets separately."
+    }
+  },
+  {
+    "topicId": "solid-single-responsibility",
+    "mentalModel": {
+      "tr": "SRP “sınıfta tek metot olsun” demek değildir. Bir modülün değişmesi için tek, tutarlı neden olması anlamına gelir; iş kuralları ile e-posta/DB altyapısını aynı yerde biriktirme.",
+      "en": "SRP does not mean one method per class. A module should have one coherent reason to change; avoid mixing business policy with email or persistence plumbing."
+    },
+    "language": "csharp",
+    "code": "public class InvoiceCalculator {\n  public Money Calculate(Invoice invoice) { /* policy */ }\n}\npublic class InvoiceRepository {\n  public Task SaveAsync(Invoice invoice) { /* IO */ }\n}",
+    "checkpoint": {
+      "tr": "Sorumluluk ayrımı için gerçek değişim eksenini düşün; aşırı sınıf bölmenin de koordinasyon maliyeti vardır.",
+      "en": "Identify real axes of change rather than splitting classes indiscriminately."
+    }
+  },
+  {
+    "topicId": "solid-liskov-substitution",
+    "mentalModel": {
+      "tr": "LSP alt tiplerin temel tipin davranış sözleşmesini bozmamasını ister. Yalnızca aynı interface’i implemente etmek yetmez: önkoşulları güçlendirmek veya garantileri azaltmak sözleşmeyi ihlal edebilir.",
+      "en": "LSP requires subtype behavior to honor the base contract. Implementing the same interface is not enough: stronger preconditions or weaker postconditions can violate substitutability."
+    },
+    "language": "csharp",
+    "code": "// Bad: account type unexpectedly rejects normal Withdraw.\npublic interface IWithdrawable { void Withdraw(decimal amount); }\n// Model unsupported operations as separate capabilities:\npublic interface IReadOnlyBalance { decimal Balance { get; } }",
+    "checkpoint": {
+      "tr": "Sözleşme testleriyle bütün implementasyonlarda aynı beklenen davranışı doğrula.",
+      "en": "Use contract tests against all implementations to verify the shared behavioral expectations."
+    }
+  },
+  {
+    "topicId": "solid-dependency-inversion",
+    "mentalModel": {
+      "tr": "DIP üst seviye politika modüllerinin alt seviye altyapı detayı yerine soyutlamalara bağlı olmasını söyler. Dependency Injection (nesneyi sağlama yöntemi) ile aynı kavram değildir.",
+      "en": "DIP says high-level policy and low-level infrastructure should depend on abstractions. It is not identical to Dependency Injection, which is an object-wiring technique."
+    },
+    "language": "csharp",
+    "code": "public interface IClock { DateTimeOffset UtcNow { get; } }\npublic sealed class SystemClock : IClock {\n   public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;\n}\n// Domain service depends on IClock, not SystemClock.",
+    "checkpoint": {
+      "tr": "Soyutlama eklemeyi gerçek değişim/izolasyon ihtiyacıyla gerekçelendir; her class için interface zorunlu değildir.",
+      "en": "Use abstractions for meaningful boundaries; not every class needs an interface."
+    }
+  },
+  {
+    "topicId": "binary-search-invariants",
+    "mentalModel": {
+      "tr": "Binary search’in kritik noktası “ortayı bulmak” değil aralığın her iterasyonda küçülmesini sağlayan invariant’tır. Inclusive/exclusive sınırları net tanımla.",
+      "en": "The heart of binary search is not calculating the midpoint; it is maintaining an invariant that strictly shrinks the candidate interval. Define inclusive/exclusive boundaries."
+    },
+    "language": "csharp",
+    "code": "int left = 0, right = a.Length; // [left, right)\nwhile (left < right) {\n    int mid = left + (right - left) / 2;\n    if (a[mid] < target) left = mid + 1;\n    else right = mid;\n}\n// left is lower_bound insertion position",
+    "checkpoint": {
+      "tr": "Boş dizi, duplicate, bulunamayan değer ve tek eleman testini açıklamayı unutma.",
+      "en": "Test an empty array, duplicates, missing keys, and single-element inputs."
+    }
+  },
+  {
+    "topicId": "hash-tables-and-collisions",
+    "mentalModel": {
+      "tr": "Hash fonksiyonu anahtarları kovaya dağıtır; collision aynı hash değerinin aynı anahtar olduğu anlamına gelmez. Dictionary eşitlik ve hash sözleşmesini birlikte kullanır.",
+      "en": "A hash maps keys to buckets; a collision does not mean identical keys. Dictionaries rely on both hash and equality contracts."
+    },
+    "language": "csharp",
+    "code": "public override bool Equals(object? o) =>\n    o is Key k && k.Id == Id;\npublic override int GetHashCode() => Id.GetHashCode();",
+    "checkpoint": {
+      "tr": "Mutable anahtarı Dictionary içine ekledikten sonra hash’i etkileyen alanını değiştirmek lookup’ı bozabilir.",
+      "en": "Mutating a key field after insertion can break dictionary lookup."
+    }
+  },
+  {
+    "topicId": "virtual-memory-and-page-faults",
+    "mentalModel": {
+      "tr": "Sanal bellek süreçlere yalıtılmış adres alanı verir. Page fault geçersiz erişim hatası olmak zorunda değildir: var olan sayfa henüz RAM’de yoksa işletim sistemi onu eşleyebilir.",
+      "en": "Virtual memory gives processes isolated address spaces. A page fault is not necessarily an error: an address may be valid yet require the OS to map data into memory."
+    },
+    "language": "text",
+    "code": "Process virtual address\n  → page table lookup\n  → TLB miss / page fault\n  → physical frame (or access denied)",
+    "checkpoint": {
+      "tr": "Minor/major page fault, working set ve swap I/O farklarını anlat.",
+      "en": "Distinguish minor/major page faults, working set, and swap I/O."
+    }
+  },
+  {
+    "topicId": "tcp-handshake-and-time-wait",
+    "mentalModel": {
+      "tr": "TCP bağlantısı tipik olarak SYN → SYN-ACK → ACK ile kurulur. TIME_WAIT eski segmentlerin yanlış yeni oturuma karışmasını önler; her TIME_WAIT hata değildir.",
+      "en": "TCP typically establishes connections via SYN → SYN-ACK → ACK. TIME_WAIT helps old segments expire before an identical connection tuple is reused; it is not inherently an error."
+    },
+    "language": "text",
+    "code": "client            server\n  SYN -------->\n      <------ SYN,ACK\n  ACK -------->\n  ESTABLISHED",
+    "checkpoint": {
+      "tr": "Bir API yavaşsa yalnızca sunucu koduna bakma: DNS, TLS, RTT, retransmit ve queue sürelerini ayır.",
+      "en": "For slow APIs, separate DNS, TLS, RTT, retransmissions, and queueing from application processing."
+    }
+  },
+  {
+    "topicId": "dns-resolution-and-ttl",
+    "mentalModel": {
+      "tr": "DNS cache katmanları vardır: tarayıcı, OS, resolver ve authoritative. TTL geçişleri hızlandırabilir ancak servisler bağlantı havuzları nedeniyle eski IP’ye bir süre daha bağlı kalabilir.",
+      "en": "DNS resolution involves browser, OS, recursive resolver, and authoritative caches. TTL affects freshness, but existing connection pools may continue to use old IPs."
+    },
+    "language": "bash",
+    "code": "dig example.com A\ndig example.com AAAA\ndig +trace example.com",
+    "checkpoint": {
+      "tr": "DNS TTL ile HttpClient PooledConnectionLifetime’ın farklı seviyeleri kontrol ettiğini açıkla.",
+      "en": "Explain why DNS TTL and HttpClient PooledConnectionLifetime control different layers."
+    }
+  },
+  {
+    "topicId": "symmetric-encryption-and-aead",
+    "mentalModel": {
+      "tr": "AEAD sadece şifreleme değil doğrulama da sağlar. AES-GCM’de aynı anahtar altında nonce tekrarını önlemek kritik bir güvenlik invariant’ıdır.",
+      "en": "AEAD provides confidentiality and authentication. With AES-GCM, preventing nonce reuse under the same key is a critical security invariant."
+    },
+    "language": "text",
+    "code": "Ciphertext, tag = AES-GCM(key, unique_nonce, plaintext, AAD)\n# On decryption: verify tag BEFORE trusting plaintext.\n# Key/nonce lifetime must be designed, not guessed.",
+    "checkpoint": {
+      "tr": "ECB/CBC, GCM, nonce, salt, authentication tag ve AAD görevlerini karıştırma.",
+      "en": "Distinguish ECB/CBC, GCM, nonce, salt, authentication tag, and AAD."
+    }
+  },
+  {
+    "topicId": "argon2id-password-hashing",
+    "mentalModel": {
+      "tr": "Parola kaydı hızlı SHA-256 ile yapılmaz. Argon2id gibi bellek maliyetli KDF; benzersiz salt, ölçülmüş parametreler ve gerektiğinde pepper stratejisi kullanır.",
+      "en": "Do not store passwords using fast SHA-256. A memory-hard KDF such as Argon2id uses unique salts, carefully calibrated cost parameters, and optionally a managed pepper."
+    },
+    "language": "text",
+    "code": "stored = Argon2id(password, random_salt, memory, iterations)\n# Verification recomputes the KDF and uses safe comparison.\n# Store the algorithm version and parameters with the hash.",
+    "checkpoint": {
+      "tr": "Hashing encryption değildir; parola doğrulamak için geri çözme yapılmaz.",
+      "en": "Hashing is not encryption: passwords are not recovered to verify them."
+    }
+  },
+  {
+    "topicId": "jwt-validation-and-key-rotation",
+    "mentalModel": {
+      "tr": "JWT imza kontrolü token’ın yetki vermeye yeterli olduğu anlamına gelmez. Issuer, audience, expiry, not-before ve claims kontrol edilmeli; anahtar rotasyonları planlanmalıdır.",
+      "en": "A valid JWT signature is necessary but not sufficient. Validate issuer, audience, expiry, not-before, and authorization claims; plan for signing-key rotation."
+    },
+    "language": "text",
+    "code": "verify_signature(token, trusted_key_for_header_kid)\nvalidate(iss, aud, exp, nbf)\nauthorize(resource_owner, action, user_claims)",
+    "checkpoint": {
+      "tr": "Client tarafındaki base64 decode işlemi güvenlik doğrulaması değildir.",
+      "en": "Base64-decoding a JWT in the browser is not security validation."
+    }
+  },
+  {
+    "topicId": "composite-indexes-and-leftmost-prefix",
+    "mentalModel": {
+      "tr": "Bileşik indekste kolon sırası seçiciliği ve sort davranışını etkiler. Tek bir indeks her sorgunun en iyi indeksi değildir; execution plan, cardinality ve yazma maliyetini ölç.",
+      "en": "Column order in composite indexes affects matching and ordering. One index rarely serves all workloads; use execution plans, cardinality and write-amplification measurements."
+    },
+    "language": "sql",
+    "code": "CREATE INDEX ix_orders_user_created\n  ON Orders(UserId, CreatedAt DESC);\nSELECT TOP (20) * FROM Orders\nWHERE UserId = @userId\nORDER BY CreatedAt DESC;",
+    "checkpoint": {
+      "tr": "Sargable predicate, covering index, lookup ve parameter sniffing’i gerçek execution plan ile doğrula.",
+      "en": "Check sargability, covering indexes, lookups, and parameter sniffing using actual plans."
+    }
+  },
+  {
+    "topicId": "mvcc-and-snapshot-isolation",
+    "mentalModel": {
+      "tr": "MVCC birden fazla versiyonla okuma/yazma çakışmalarını azaltır. Snapshot isolation her write skew veya iş invariant ihlalini otomatik engellemez.",
+      "en": "MVCC reduces reader/writer blocking through multiple versions. Snapshot isolation does not automatically prevent write skew or enforce every business invariant."
+    },
+    "language": "text",
+    "code": "T1 reads A=on, B=on\nT2 reads A=on, B=on\nT1 writes A=off\nT2 writes B=off\n# Both can commit in some snapshot models; invariant fails.",
+    "checkpoint": {
+      "tr": "Bankacılık invariantlarını UNIQUE constraint, uygun isolation veya kilitleme ile veritabanı seviyesinde de koru.",
+      "en": "Enforce financial invariants with constraints, appropriate isolation, or locking at the database boundary."
+    }
+  },
+  {
+    "topicId": "double-entry-ledger",
+    "mentalModel": {
+      "tr": "Finansal hareketler salt “bakiye güncelle” değildir. Çift taraflı muhasebe aynı işlemde dengeli debit/credit satırları üretir; idempotency ve audit invariantlarını ayrı yönet.",
+      "en": "Financial transfers are not simply balance edits. Double-entry ledgers create balancing debit/credit postings; idempotency and auditability are additional invariants."
+    },
+    "language": "sql",
+    "code": "BEGIN TRANSACTION;\nINSERT INTO Ledger(AccountId, Amount) VALUES\n  (@source, -@amount),\n  (@destination, +@amount);\n-- enforce sum=0 per journal transaction\nCOMMIT;",
+    "checkpoint": {
+      "tr": "ACID, audit log, immutability ve reversals arasındaki ayrımı açıklamaya hazır ol.",
+      "en": "Be ready to distinguish ACID, audit logs, immutability, and reversals."
+    }
+  },
+  {
+    "topicId": "idempotency-keys-in-payments",
+    "mentalModel": {
+      "tr": "Idempotency key, ağ tekrarlarında aynı işlemin tekrar uygulanmasını engeller; sadece Redis cache’e yazmak yarış koşullarına karşı tek başına garanti vermez. Anahtar, payload hash ve durum DB üzerinde atomik korunmalı.",
+      "en": "Idempotency keys prevent duplicate effects during network retries; Redis caching alone cannot guarantee race-free processing. Atomically enforce key, request fingerprint, and status with durable storage."
+    },
+    "language": "sql",
+    "code": "CREATE UNIQUE INDEX uq_payment_request\n  ON PaymentRequest(CustomerId, IdempotencyKey);\n-- In a transaction: acquire unique request row,\n-- verify payload hash, apply ledger posting, save result.",
+    "checkpoint": {
+      "tr": "Aynı key farklı payload ile gelirse açık politika belirle; timeout halinde commit’in olup olmadığını araştır.",
+      "en": "Define behavior for the same key with a different payload; after a timeout, reconcile whether the transaction committed."
+    }
+  },
+  {
+    "topicId": "transactional-outbox",
+    "mentalModel": {
+      "tr": "Outbox, aynı DB transaction’ında iş değişikliği ve mesaj taslağı yazar. Publisher asenkron gönderir. Retry nedeniyle tüketici tarafında duplicate olabilir, inbox/deduplication gerekir.",
+      "en": "The outbox pattern writes business state and pending message in one DB transaction. A separate publisher delivers later; retries can duplicate messages, so consumers still need deduplication."
+    },
+    "language": "sql",
+    "code": "BEGIN TRANSACTION;\nUPDATE Orders SET Status = 'Paid' WHERE Id = @id;\nINSERT INTO Outbox(EventId, Payload)\nVALUES (@eventId, @serializedOrderPaid);\nCOMMIT;\n-- A worker publishes and marks outbox rows later.",
+    "checkpoint": {
+      "tr": "DB + message broker için global distributed transaction iddiası olmadan eventual delivery ve idempotent tüketici anlat.",
+      "en": "Explain eventual delivery and idempotent consumers without assuming distributed transactions across DB and broker."
+    }
+  },
+  {
+    "topicId": "sagas-and-compensation",
+    "mentalModel": {
+      "tr": "Saga yerel transaction’ları ve telafi eylemlerini düzenler; compensation “geçmişi atomik geri alma” değildir. Dış sistemlerde geri dönüş imkânsız olabilir.",
+      "en": "Sagas coordinate local transactions and compensating actions; compensation is not a universal atomic rollback. Some external side effects cannot be undone."
+    },
+    "language": "text",
+    "code": "ReserveInventory → ChargePayment → Ship\n       |                |\n       ↓ failure        ↓ failure\n ReleaseInventory  Refund + ReleaseInventory",
+    "checkpoint": {
+      "tr": "Timeout sonrası belirsiz sonuçlar için retry, reconciliation ve audit tasarımını birlikte savun.",
+      "en": "Defend retry, reconciliation, and audit decisions for uncertain outcomes after timeouts."
+    }
+  },
+  {
+    "topicId": "threadpool-starvation",
+    "mentalModel": {
+      "tr": "ThreadPool starvation genellikle thread’lerin asenkron I/O yerine bloklanmasıyla görünür. CPU %20 iken yüksek latency varsa queue length ve worker count artışına bak.",
+      "en": "ThreadPool starvation often appears when worker threads block instead of awaiting I/O. Low CPU with high latency should trigger queue-length and worker-count investigation."
+    },
+    "language": "csharp",
+    "code": "// Avoid sync-over-async:\nvar result = client.GetAsync(url).Result; // blocks\n// Prefer async all the way:\nvar result = await client.GetAsync(url, ct);",
+    "checkpoint": {
+      "tr": "Task.Run ile her DB çağrısını sarmalamak true async I/O yerine geçmez.",
+      "en": "Wrapping every DB operation in Task.Run is not a substitute for true async I/O."
+    }
+  },
+  {
+    "topicId": "channels-and-bounded-producer-consumer",
+    "mentalModel": {
+      "tr": "Bounded channel kapasite sınırına gelince producer’ı bekletebilir. Bu backpressure, belleğin sınırsız büyümesini önlemeye yardım eder.",
+      "en": "A bounded channel can block or wait producers once capacity is reached. This backpressure prevents unbounded in-memory queue growth."
+    },
+    "language": "csharp",
+    "code": "var queue = Channel.CreateBounded<Job>(\n    new BoundedChannelOptions(100) {\n        FullMode = BoundedChannelFullMode.Wait\n    });\nawait queue.Writer.WriteAsync(job, ct);",
+    "checkpoint": {
+      "tr": "In-memory Channel durumu process çökünce kaybolabilir; kalıcı teslim gerekiyorsa durable queue seç.",
+      "en": "An in-memory Channel is not crash-durable; use a durable queue for reliable delivery."
+    }
+  },
+  {
+    "topicId": "kubernetes-readiness-liveness-startup-probes",
+    "mentalModel": {
+      "tr": "Readiness trafik yönlendirme kararına, liveness process yeniden başlatma kararına, startup probe ise yavaş başlatmaya yöneliktir. Readiness sorununu liveness ile “çözmek” restart döngüsü üretebilir.",
+      "en": "Readiness controls routing, liveness controls restarts, and startup probes accommodate slow initialization. Treating readiness failures as liveness failures can cause restart loops."
+    },
+    "language": "yaml",
+    "code": "readinessProbe:\n  httpGet: { path: /ready, port: 8080 }\n  periodSeconds: 5\nlivenessProbe:\n  httpGet: { path: /live, port: 8080 }\n  periodSeconds: 20",
+    "checkpoint": {
+      "tr": "Hazır olmayan instance’a trafik kesilirken diğer instance’ların servis vermeye devam etmesi gerektiğini anlat.",
+      "en": "Describe how an unready instance is taken out of routing while healthy peers continue serving."
+    }
+  },
+  {
+    "topicId": "ssr-ssg-and-hydration",
+    "mentalModel": {
+      "tr": "SSR HTML’yi sunucuda üretir; SSG build sırasında üretir; hydration server HTML’ye tarayıcı etkileşimi bağlar. SEO, ilk render ve kullanıcıya özel veri arasında bilinçli tercih gerekir.",
+      "en": "SSR renders HTML on the server; SSG prebuilds it; hydration attaches client interactivity to existing markup. Balance SEO, first render and personalization needs."
+    },
+    "language": "text",
+    "code": "Server: <h1>Indexed topic title</h1>\n          ↓ HTML returned to crawler\nBrowser: hydrate only interactive quiz controls\n          ↓ local answer selection and storage",
+    "checkpoint": {
+      "tr": "Bütün içerik sadece useEffect fetch ile gelirse arama motorları ve first contentful paint açısından maliyetli olabilir.",
+      "en": "Client-only useEffect content fetching can degrade crawlability and first meaningful paint."
+    }
+  },
+  {
+    "topicId": "rag-retrieval-and-grounding",
+    "mentalModel": {
+      "tr": "RAG modelin parametrelerini eğitmek değil, cevap oluştururken ilgili bilgi parçalarını retrieval ile context’e eklemektir. Retrieval recall, citation faithfulness ve hallucination oranını ayrı ölç.",
+      "en": "RAG does not train model weights; it retrieves relevant context for generation. Evaluate retrieval recall, citation faithfulness, and unsupported claims separately."
+    },
+    "language": "text",
+    "code": "query → embedding → retrieve top-k → rerank\n      → prompt with grounded excerpts\n      → answer + sources + uncertainty\n      → evaluation",
+    "checkpoint": {
+      "tr": "Retrieval kötü ise daha uzun prompt çözüm değildir; chunking ve relevance quality önce gelir.",
+      "en": "Longer prompts cannot rescue irrelevant retrieval; fix chunking and relevance first."
+    }
+  },
+  {
+    "topicId": "prompt-injection-defenses",
+    "mentalModel": {
+      "tr": "Alınan web sayfası, doküman veya tool sonucu güvenilmeyen veridir. Prompt injection o verinin “komut” gibi yorumlanmasına dayanır; araç yetki sınırları, doğrulama ve insan onayı uygula.",
+      "en": "Retrieved pages, documents, and tool results are untrusted data. Prompt injection tries to promote such data into instructions. Enforce tool permissions, validation, and human approval for critical actions."
+    },
+    "language": "text",
+    "code": "Trusted system policy\n    ↓\nAgent receives a webpage (UNTRUSTED)\n    ↓\nExtract facts only; do not execute page instructions\n    ↓\nRequire approval before irreversible actions",
+    "checkpoint": {
+      "tr": "RAG ve agent tool output güven sınırlarını açıklayabil; yalnızca “prompt’a görmezden gel yazmak” yeterli değildir.",
+      "en": "Explain trust boundaries for RAG and agent tools; telling a model to ignore attacks is insufficient."
+    }
+  },
+  {
+    "topicId": "llm-evaluation-and-golden-datasets",
+    "mentalModel": {
+      "tr": "LLM performansı tek “beğendim” skoru değildir. Golden dataset, tekrar edilebilir input/expected-properties ve human-review örnekleri sunar; model drift ve maliyet ölçülebilir.",
+      "en": "LLM quality needs more than subjective impressions. Golden datasets provide repeatable inputs and expected properties, combining automated grading and human review."
+    },
+    "language": "text",
+    "code": "Dataset: { prompt, expected_properties, risk_class }\nMetrics: correctness, groundedness, latency, cost\nRun: baseline vs candidate → analyze failures\nGate: ship only if risk thresholds pass",
+    "checkpoint": {
+      "tr": "LLM judge metriklerinin de hatalı olabileceğini kabul et; kritik sonuçlarda manuel doğrulama yap.",
+      "en": "LLM-as-judge scores can be wrong; use human review for high-stakes failures."
+    }
+  },
+  {
+    "topicId": "communicating-architecture-trade-offs",
+    "mentalModel": {
+      "tr": "Kıdemli mühendisin işi bir teknolojiye hayran olmak değil kararı kanıtla savunmaktır. Önce kısıtları yaz, sonra alternatif ve failure mode’ları karşılaştır, kararın geri alma yolunu belirle.",
+      "en": "A senior engineer does not sell fashionable technology; they justify a decision with evidence. Name constraints, evaluate options/failure modes, and define rollback before committing."
+    },
+    "language": "text",
+    "code": "Context → Constraints → Options → Decision\n          ↓                ↓\n       Metrics         Failure modes\n          └── Review after production evidence ──┘",
+    "checkpoint": {
+      "tr": "Örnek cevap: “Bu yük ve ekip yapısında modüler monolit yeterli; şu ölçümü aşarsak servis ayrımını gözden geçiririz.”",
+      "en": "Example: “A modular monolith fits this workload/team; we revisit splitting after an agreed metric threshold.”"
+    }
+  }
+]
