@@ -1,0 +1,30 @@
+{
+  "topics": 198,
+  "questions": 1012,
+  "curatedCases": 22,
+  "categories": 18,
+  "perCategory": {
+    "core": 60,
+    "algo": 66,
+    "os": 56,
+    "network": 61,
+    "security": 73,
+    "runtime": 72,
+    "csharp": 70,
+    "aspnet": 63,
+    "data": 72,
+    "dist": 73,
+    "arch": 56,
+    "concurrency": 42,
+    "observability": 25,
+    "testing": 40,
+    "cloud": 45,
+    "frontend": 41,
+    "ai": 51,
+    "leadership": 46
+  },
+  "languages": [
+    "tr",
+    "en"
+  ]
+}
