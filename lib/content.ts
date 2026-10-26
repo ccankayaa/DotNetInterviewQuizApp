@@ -1,0 +1,28 @@
+import rawCategories from '@/data/generated/categories.json';
+import rawTopics from '@/data/generated/topics.json';
+import rawQuestions from '@/data/generated/questions.json';
+import rawIndex from '@/data/generated/question-index.json';
+import rawStats from '@/data/generated/stats.json';
+
+export type Locale = 'tr' | 'en';
+export type Translated = Record<Locale, string>;
+export type Level = 'basic' | 'intermediate' | 'advanced';
+export type Facet = 'mechanism' | 'practice' | 'pitfall' | 'tradeoff' | 'signal' | 'scenario';
+export type Category = { id: string; title: Translated; short: string; description: Translated; source: string; topicCount: number; questionCount: number };
+export type Topic = { id: string; category: string; level: Level; title: Translated; facts: Record<Exclude<Facet, 'scenario'>, Translated>; source: string };
+export type Question = { id: string; topicId: string; category: string; level: Level; type: 'concept' | 'case'; facet: Facet; title: Translated; prompt: Translated; options: Record<Locale, string[]>; correctIndex: number; explanation: Translated; takeaway: Translated; code?: string; sources: string[] };
+export type QuestionSummary = Pick<Question, 'id' | 'topicId' | 'category' | 'level' | 'type' | 'facet' | 'prompt' | 'title'>;
+export const categories = rawCategories as Category[];
+export const topics = rawTopics as Topic[];
+export const questions = rawQuestions as Question[];
+export const questionIndex = rawIndex as QuestionSummary[];
+export const contentStats = rawStats as { topics: number; questions: number; curatedCases: number; categories: number; languages: string[] };
+const topicMap = new Map(topics.map(item => [item.id, item]));
+const questionMap = new Map(questions.map(item => [item.id, item]));
+const categoryMap = new Map(categories.map(item => [item.id, item]));
+export const getTopic = (id: string) => topicMap.get(id);
+export const getQuestion = (id: string) => questionMap.get(id);
+export const getCategory = (id: string) => categoryMap.get(id);
+export const relatedQuestions = (id: string) => questions.filter(q => q.topicId === id);
+export const topicQuestionCount = (id: string) => questionIndex.filter(q => q.topicId === id).length;
+export const byId = (ids: string[]) => ids.map(id => questionMap.get(id)).filter((q): q is Question => Boolean(q));
